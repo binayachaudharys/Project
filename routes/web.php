@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Customer\AppointmentController;
+use App\Http\Controllers\Pos\PosController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\PackageCatalogController;
@@ -36,8 +37,14 @@ Route::middleware(['auth', 'role:owner'])->prefix('admin')->group(function () {
 });
 
 Route::middleware(['auth', 'role:staff,owner'])->group(function () {
-    Route::get('/pos', fn () => Inertia::render('Pos/Index'))->name('pos.index');
     Route::get('/staff/today', [TodayController::class, 'index'])->name('staff.today');
+
+    Route::prefix('pos')->name('pos.')->group(function () {
+        Route::get('/', [PosController::class, 'index'])->name('index');
+        Route::get('/customers', [PosController::class, 'searchCustomers'])->name('customers');
+        Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
+        Route::post('/sales/{sale}/void', [PosController::class, 'void'])->name('sales.void');
+    });
 });
 
 require __DIR__.'/auth.php';
