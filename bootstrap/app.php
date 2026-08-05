@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        $middleware->validateCsrfTokens(except: [
+            'payments/*/callback',
+        ]);
+
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);

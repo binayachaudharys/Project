@@ -22,7 +22,9 @@ const CATALOG_SECTIONS = [
 
 export default function PosIndex({ services, packages, products }) {
     const cart = usePosCart();
-    const errors = usePage().props.errors ?? {};
+    const page = usePage();
+    const errors = page.props.errors ?? {};
+    const flash = page.props.flash ?? {};
     const catalogs = { services, packages, products };
 
     const [phone, setPhone] = useState('');
@@ -30,6 +32,36 @@ export default function PosIndex({ services, packages, products }) {
     const [customer, setCustomer] = useState(null);
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [processing, setProcessing] = useState(false);
+    const [paymentInitiate, setPaymentInitiate] = useState(flash.payment_initiate ?? null);
+    const [staffRef, setStaffRef] = useState('');
+
+    useEffect(() => {
+        if (flash.payment_initiate) {
+            setPaymentInitiate(flash.payment_initiate);
+        }
+    }, [flash.payment_initiate]);
+
+    useEffect(() => {
+        if (!paymentInitiate || paymentInitiate.type !== 'redirect' || paymentInitiate.method !== 'POST') {
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = paymentInitiate.url;
+        form.style.display = 'none';
+
+        Object.entries(paymentInitiate.params ?? {}).forEach(([key, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value ?? '';
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    }, [paymentInitiate]);
 
     useEffect(() => {
         if (phone.trim().length < 2) {
@@ -90,12 +122,77 @@ export default function PosIndex({ services, packages, products }) {
         );
     }
 
+    function confirmStaffPayment(e) {
+        e.preventDefault();
+        if (!paymentInitiate?.sale_id) {
+            return;
+        }
+
+        setProcessing(true);
+        router.post(
+            route('pos.payments.staff-confirm', paymentInitiate.sale_id),
+            {
+                method: paymentMethod === 'cash' ? paymentInitiate.method : paymentMethod,
+                gateway_reference: staffRef || null,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setPaymentInitiate(null);
+                    setStaffRef('');
+                },
+                onFinish: () => setProcessing(false),
+            },
+        );
+    }
+
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Point of Sale</h2>}>
             <Head title="POS" />
 
             <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-3 lg:px-8">
                 <div className="space-y-6 lg:col-span-2">
+                    {flash.success && (
+                        <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{flash.success}</p>
+                    )}
+
+                    {paymentInitiate?.type === 'qr' && (
+                        <section className="rounded-lg bg-white p-6 shadow">
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Scan to pay</h3>
+                            <p className="mt-2 break-all font-mono text-xs text-gray-600">{paymentInitiate.qr_data}</p>
+                            <p className="mt-2 text-sm text-gray-500">
+                                Amount: {formatPrice(paymentInitiate.meta?.amount ?? cart.total)} · Sale #{paymentInitiate.sale_id}
+                            </p>
+                        </section>
+                    )}
+
+                    {paymentInitiate && (
+                        <section className="rounded-lg bg-white p-6 shadow">
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                                Staff confirm (LAN fallback)
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                                Mark paid after the customer shows wallet success on their phone.
+                            </p>
+                            <form onSubmit={confirmStaffPayment} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <input
+                                    type="text"
+                                    placeholder="Gateway ref (optional)"
+                                    value={staffRef}
+                                    onChange={(e) => setStaffRef(e.target.value)}
+                                    className="flex-1 rounded-md border-gray-300 text-sm"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={processing}
+                                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                                >
+                                    Confirm paid
+                                </button>
+                            </form>
+                        </section>
+                    )}
+
                     <section className="rounded-lg bg-white p-6 shadow">
                         <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Customer</h3>
                         <input

@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Customer\AppointmentController;
+use App\Http\Controllers\Payments\PaymentCallbackController;
 use App\Http\Controllers\Pos\PosController;
+use App\Http\Controllers\Pos\StaffConfirmPaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\PackageCatalogController;
@@ -36,6 +38,9 @@ Route::middleware(['auth', 'role:owner'])->prefix('admin')->group(function () {
     Route::get('/', fn () => Inertia::render('Admin/Dashboard'))->name('admin.dashboard');
 });
 
+Route::match(['GET', 'POST'], '/payments/{method}/callback', [PaymentCallbackController::class, 'handle'])
+    ->name('payments.callback');
+
 Route::middleware(['auth', 'role:staff,owner'])->group(function () {
     Route::get('/staff/today', [TodayController::class, 'index'])->name('staff.today');
 
@@ -44,6 +49,8 @@ Route::middleware(['auth', 'role:staff,owner'])->group(function () {
         Route::get('/customers', [PosController::class, 'searchCustomers'])->name('customers');
         Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
         Route::post('/sales/{sale}/void', [PosController::class, 'void'])->name('sales.void');
+        Route::post('/sales/{sale}/staff-confirm', [StaffConfirmPaymentController::class, 'store'])
+            ->name('payments.staff-confirm');
     });
 });
 

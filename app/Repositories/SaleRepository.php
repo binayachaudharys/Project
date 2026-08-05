@@ -52,6 +52,37 @@ class SaleRepository extends BaseRepository
     }
 
     /**
+     * Finalize a pending digital payment: apply stock once, mark paid, and
+     * complete any linked appointment. Idempotent when already paid.
+     */
+    public function finalizePendingSaleAsPaid(Sale $sale, User $actor): Sale
+    {
+        return DB::transaction(function () use ($sale, $actor) {
+            $sale = $this->model->newQuery()->lockForUpdate()->findOrFail($sale->id);
+
+            if ($sale->status === SaleStatus::Paid) {
+                return $sale->fresh(['items', 'payments']);
+            }
+
+            if ($sale->status !== SaleStatus::PendingPayment) {
+                throw ValidationException::withMessages([
+                    'sale' => 'Only pending-payment sales can be marked paid.',
+                ]);
+            }
+
+            $this->applyStockForPaidSale($sale, $actor);
+
+            $sale->update(['status' => SaleStatus::Paid]);
+
+            if ($sale->appointment_id) {
+                $sale->appointment?->update(['status' => AppointmentStatus::Completed]);
+            }
+
+            return $sale->fresh(['items', 'payments']);
+        });
+    }
+
+    /**
      * Void a paid sale: restores product stock line by line and marks the
      * sale `void`. Throws if the sale isn't currently paid.
      */
