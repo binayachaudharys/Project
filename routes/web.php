@@ -1,18 +1,17 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
+use App\Http\Controllers\Public\HomeController;
+use App\Http\Controllers\Public\PackageCatalogController;
+use App\Http\Controllers\Public\ServiceCatalogController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+Route::get('/services', [ServiceCatalogController::class, 'index'])->name('services.index');
+Route::get('/packages', [PackageCatalogController::class, 'index'])->name('packages.index');
+Route::get('/packages/{package}', [PackageCatalogController::class, 'show'])->name('packages.show');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');

@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --salon-rose: #b24a47;
+    --salon-rose-dark: #8f3634;
+    --salon-blush: #fdf0e9;
+    --salon-cream: #fff9f5;
+    --salon-charcoal: #2c2422;
+    --salon-charcoal-soft: #4a3f3b;
+}
