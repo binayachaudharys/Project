@@ -14,6 +14,7 @@ use App\Models\Sale;
 use App\Models\Service;
 use App\Models\StockMovement;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +22,8 @@ use Jsdecena\Baserepo\BaseRepository;
 
 class SaleRepository extends BaseRepository
 {
+    private const MAX_SALE_NUMBER_ATTEMPTS = 3;
+
     public function __construct(Sale $model)
     {
         parent::__construct($model);
@@ -34,6 +37,56 @@ class SaleRepository extends BaseRepository
      * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, items:array<int, array{item_type:string, item_id:int, qty:int}>}  $payload
      */
     public function checkout(array $payload): Sale
+    {
+        $attempt = 0;
+
+        while (true) {
+            try {
+                return $this->checkoutWithinTransaction($payload);
+            } catch (QueryException $e) {
+                if (! $this->isDuplicateSaleNumberException($e) || ++$attempt >= self::MAX_SALE_NUMBER_ATTEMPTS) {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    /**
+     * Void a paid sale: restores product stock line by line and marks the
+     * sale `void`. Throws if the sale isn't currently paid.
+     */
+    public function voidPaidSale(Sale $sale, User $actor): Sale
+    {
+        return DB::transaction(function () use ($sale, $actor) {
+            if ($sale->status !== SaleStatus::Paid) {
+                throw ValidationException::withMessages([
+                    'sale' => 'Only paid sales can be voided.',
+                ]);
+            }
+
+            foreach ($sale->items()->where('item_type', ItemType::Product->value)->get() as $line) {
+                $product = Product::lockForUpdate()->findOrFail($line->item_id);
+                $product->increment('stock_qty', $line->qty);
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'delta' => $line->qty,
+                    'reason' => StockReason::VoidRestore->value,
+                    'sale_id' => $sale->id,
+                    'user_id' => $actor->id,
+                ]);
+            }
+
+            $sale->update(['status' => SaleStatus::Void]);
+
+            return $sale->fresh(['items', 'payments']);
+        });
+    }
+
+    /**
+     * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, items:array<int, array{item_type:string, item_id:int, qty:int}>}  $payload
+     */
+    protected function checkoutWithinTransaction(array $payload): Sale
     {
         return DB::transaction(function () use ($payload) {
             $staff = User::findOrFail($payload['staff_id']);
@@ -97,38 +150,6 @@ class SaleRepository extends BaseRepository
     }
 
     /**
-     * Void a paid sale: restores product stock line by line and marks the
-     * sale `void`. Throws if the sale isn't currently paid.
-     */
-    public function voidPaidSale(Sale $sale, User $actor): Sale
-    {
-        return DB::transaction(function () use ($sale, $actor) {
-            if ($sale->status !== SaleStatus::Paid) {
-                throw ValidationException::withMessages([
-                    'sale' => 'Only paid sales can be voided.',
-                ]);
-            }
-
-            foreach ($sale->items()->where('item_type', ItemType::Product->value)->get() as $line) {
-                $product = Product::lockForUpdate()->findOrFail($line->item_id);
-                $product->increment('stock_qty', $line->qty);
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'delta' => $line->qty,
-                    'reason' => StockReason::VoidRestore->value,
-                    'sale_id' => $sale->id,
-                    'user_id' => $actor->id,
-                ]);
-            }
-
-            $sale->update(['status' => SaleStatus::Void]);
-
-            return $sale->fresh(['items', 'payments']);
-        });
-    }
-
-    /**
      * Resolve one cart line's server-side name/price and compute its total.
      * Client-supplied prices are never trusted.
      */
@@ -172,12 +193,38 @@ class SaleRepository extends BaseRepository
      */
     protected function nextSaleNumber(): string
     {
-        $count = $this->model->newQuery()
-            ->whereDate('created_at', now()->toDateString())
-            ->lockForUpdate()
-            ->count();
+        $datePart = now()->format('Ymd');
+        $prefix = sprintf('PGS-%s-', $datePart);
 
-        return sprintf('PGS-%s-%04d', now()->format('Ymd'), $count + 1);
+        $last = $this->model->newQuery()
+            ->where('sale_number', 'like', $prefix.'%')
+            ->orderByDesc('sale_number')
+            ->lockForUpdate()
+            ->first();
+
+        $sequence = 1;
+        if ($last !== null) {
+            $suffix = substr($last->sale_number, strlen($prefix));
+            $sequence = max(1, (int) $suffix) + 1;
+        }
+
+        return sprintf('%s%04d', $prefix, $sequence);
+    }
+
+    protected function isDuplicateSaleNumberException(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+
+        if ($sqlState === '23000') {
+            return true;
+        }
+
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'sale_number') && (
+            str_contains($message, 'unique')
+            || str_contains($message, 'duplicate')
+        );
     }
 
     /**
