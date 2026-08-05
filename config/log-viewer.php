@@ -105,6 +105,7 @@ return [
     'middleware' => [
         'web',
         'auth',
+        'role:owner',
         AuthorizeLogViewer::class,
     ],
 
@@ -120,6 +121,7 @@ return [
     'api_middleware' => [
         EnsureFrontendRequestsAreStateful::class,
         'auth',
+        'role:owner',
         AuthorizeLogViewer::class,
     ],
 
