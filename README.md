@@ -1,80 +1,123 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Pretty Girls Ladies Salon
 
-## Pretty Girls Ladies Salon (Task 1 scaffold)
+Local-first booking + POS for **Pretty Girls Ladies Salon** (Nepal).  
+Laravel 13 · Breeze (Inertia + React) · SQLite on salon PC · MySQL on VPS later.
 
-This repo is the **Pretty Girls Ladies Salon** booking app on **Laravel 13** with **Laravel Breeze** (Inertia + React).
+**Build credit:** [Art Developer](https://artdeveloper.com.np) and Market As pot
 
-- **Timezone:** `APP_TIMEZONE=Asia/Kathmandu` (see `config/app.php`).
-- **Repository layer:** [`jsdecena/baserepo`](https://github.com/jsdecena/baserepo) is installed for shared repo patterns.
-- **Log viewer:** Design called for `arcanedev/log-viewer`, but it does not support Laravel 13. We use **[opcodesio/log-viewer](https://github.com/opcodesio/log-viewer)** instead. Routes are behind the `auth` middleware (no public log access). **Owner-only** access (`role:owner`) is wired in Task 3/8.
-- **POS / payments:** `SALON_PAYMENT_SANDBOX_AUTO` in `.env.example` is a future flag for sandbox POS behavior (optional until payment tasks).
-- **Frontend:** Breeze expects `resources/js/bootstrap.js`; keep the scaffold stub unless you change axios/bootstrap setup.
+## Stack notes
 
-Local setup (PHP 8.4):
+| Piece | Choice |
+|-------|--------|
+| Auth / UI | Laravel Breeze + Inertia React + Tailwind |
+| Repos | [`jsdecena/baserepo`](https://github.com/jsdecena/baserepo) |
+| Log UI | [`opcodesio/log-viewer`](https://github.com/opcodesio/log-viewer) (owner-only). Design mentioned `arcanedev/log-viewer`, which does not support Laravel 13. |
+| Timezone | `APP_TIMEZONE=Asia/Kathmandu` |
+| DB phase 1 | SQLite (`database/database.sqlite`) |
+| DB phase 2 | MySQL on a cheap VPS |
+
+## Quick start (salon PC / LAN)
+
+PHP 8.4 (Homebrew example):
 
 ```bash
 export PATH="/opt/homebrew/opt/php@8.4/bin:/opt/homebrew/opt/php@8.4/sbin:$PATH"
-cp .env.example .env && php artisan key:generate
-touch database/database.sqlite && php artisan migrate
-npm install && npm run build
-php artisan serve
 ```
 
-Log UI (authenticated users only until Task 3): `/log-viewer`
-
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
-
-## About Laravel
-
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+First-time setup:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+npm install
+cp .env.example .env
+# Set APP_URL=http://<this-pc-lan-ip>:8000  (phones/tablets on Wi‑Fi need the real LAN IP)
+php artisan key:generate
+touch database/database.sqlite
+php artisan migrate --seed
+npm run build
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Daily / one-command serve (same Wi‑Fi phones open `http://<lan-ip>:8000`):
 
-## Contributing
+```bash
+./bin/start-salon.sh
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+The script ensures SQLite exists, runs migrations, rebuilds front-end assets, then:
 
-## Code of Conduct
+`php artisan serve --host=0.0.0.0 --port=8000`
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Development with hot reload: `npm run dev` in another terminal instead of relying on the build step alone.
 
-## Security Vulnerabilities
+### Seed logins (change passwords after first use)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+After `php artisan migrate --seed`:
 
-## License
+| Role     | Email                     | Password            |
+|----------|---------------------------|---------------------|
+| Owner    | owner@prettygirls.local  | ChangeMeOwner1!     |
+| Staff    | staff@prettygirls.local   | ChangeMeStaff1!     |
+| Customer | customer@prettygirls.local| ChangeMeCustomer1!  |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- Owner: catalog, staff users, stock, sales reports, **Log Viewer** at `/log-viewer`
+- Staff: today’s appointments, POS
+- Customer: book services/packages (no online pay on booking), My appointments
+
+### Backup (SQLite)
+
+Daily (or before risky changes), copy the database file:
+
+```bash
+cp database/database.sqlite "backups/database-$(date +%Y%m%d).sqlite"
+```
+
+Store backups off the salon PC when possible. Restoring is copy-back + restart.
+
+## Payments on LAN (§6.3)
+
+Gateways need public return/callback URLs.
+
+| Environment | Digital wallets (eSewa / Khalti / Fonepay) |
+|-------------|--------------------------------------------|
+| **LAN-only** (no tunnel) | Cash always works. Staff **Confirm paid** after customer shows success on phone (method + optional ref). |
+| **LAN + tunnel** (ngrok / Cloudflare Tunnel) | Full sandbox verify against test merchants. |
+| **Public VPS** | Live keys + real callback URLs. |
+
+- Fill `ESEWA_*`, `KHALTI_*`, `FONEPAY_*` in `.env` only on the machine (see `.env.example`; secrets empty in git).
+- `SALON_PAYMENT_SANDBOX_AUTO` controls optional sandbox helpers; keep sandbox until production.
+
+## VPS / MySQL later (§8.2)
+
+1. Deploy same repo (`git pull` / rsync).
+2. Point `.env` to MySQL (`DB_CONNECTION=mysql`, host, database, user, password).
+3. `php artisan migrate` (import/export from SQLite if you need historical data).
+4. Set `APP_URL` to HTTPS domain; live gateway keys and callbacks.
+5. `php artisan config:cache` (queue optional for MVP).
+
+## Roles at a glance
+
+- **Public:** home, services, packages, book, auth  
+- **Customer:** appointments  
+- **Staff (+ owner):** POS cash/digital, today board, staff-confirm payment on LAN  
+- **Owner:** admin catalog/stock/staff/reports + Log Viewer  
+
+## Useful commands
+
+```bash
+php artisan test          # feature suite
+npm run build             # production assets
+php artisan migrate --seed
+./bin/start-salon.sh
+```
+
+## Security highlights
+
+- CSRF on Inertia/Laravel forms  
+- Role middleware on staff/admin/log-viewer  
+- Payment amount/signature verified server-side  
+- Stock applied when sale becomes `paid` (idempotent)  
+
+## License / credit
+
+Application built for Pretty Girls Ladies Salon.  
+**Art Developer** and **Market As pot**.
