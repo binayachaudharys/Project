@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\BookableType;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 #[Fillable([
@@ -20,6 +22,7 @@ class Appointment extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'status' => AppointmentStatus::class,
+            'bookable_type' => BookableType::class,
         ];
     }
 
@@ -38,8 +41,8 @@ class Appointment extends Model
         return $this->morphTo();
     }
 
-    public function sale(): BelongsTo
+    public function sale(): HasOne
     {
-        return $this->belongsTo(Sale::class);
+        return $this->hasOne(Sale::class);
     }
 }
