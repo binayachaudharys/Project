@@ -20,4 +20,46 @@ class ServiceRepository extends BaseRepository
             ->orderBy('name')
             ->get(['id', 'name', 'description', 'duration_minutes', 'price']);
     }
+
+    public function allOrdered(): Collection
+    {
+        return $this->model->newQuery()
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @param  array{name:string, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
+     */
+    public function createService(array $data): Service
+    {
+        return $this->create([
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'duration_minutes' => (int) $data['duration_minutes'],
+            'price' => $data['price'],
+            'is_active' => (bool) ($data['is_active'] ?? true),
+        ]);
+    }
+
+    /**
+     * @param  array{name:string, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
+     */
+    public function updateService(Service $service, array $data): Service
+    {
+        $this->update([
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'duration_minutes' => (int) $data['duration_minutes'],
+            'price' => $data['price'],
+            'is_active' => (bool) ($data['is_active'] ?? $service->is_active),
+        ], $service);
+
+        return $service->fresh();
+    }
+
+    public function deleteService(Service $service): bool
+    {
+        return (bool) $service->delete();
+    }
 }

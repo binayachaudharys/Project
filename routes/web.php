@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Controllers\Admin\PackageController as AdminPackageController;
+use App\Http\Controllers\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Admin\SalesReportController;
+use App\Http\Controllers\Admin\ServiceController as AdminServiceController;
+use App\Http\Controllers\Admin\SettingController as AdminSettingController;
+use App\Http\Controllers\Admin\StaffController as AdminStaffController;
 use App\Http\Controllers\Customer\AppointmentController;
 use App\Http\Controllers\Payments\PaymentCallbackController;
 use App\Http\Controllers\Pos\PosController;
@@ -34,8 +40,22 @@ Route::middleware('auth')->group(function () {
     Route::delete('/account/appointments/{appointment}', [AppointmentController::class, 'cancel'])->name('account.appointments.cancel');
 });
 
-Route::middleware(['auth', 'role:owner'])->prefix('admin')->group(function () {
-    Route::get('/', fn () => Inertia::render('Admin/Dashboard'))->name('admin.dashboard');
+Route::middleware(['auth', 'role:owner'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', fn () => Inertia::render('Admin/Dashboard'))->name('dashboard');
+
+    Route::resource('services', AdminServiceController::class)->except(['show']);
+    Route::resource('packages', AdminPackageController::class)->except(['show']);
+    Route::resource('products', AdminProductController::class)->except(['show']);
+    Route::post('products/{product}/stock', [AdminProductController::class, 'adjustStock'])
+        ->name('products.stock');
+
+    Route::get('staff', [AdminStaffController::class, 'index'])->name('staff.index');
+    Route::post('staff', [AdminStaffController::class, 'store'])->name('staff.store');
+
+    Route::get('sales', [SalesReportController::class, 'index'])->name('sales.index');
+
+    Route::get('settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
+    Route::put('settings', [AdminSettingController::class, 'update'])->name('settings.update');
 });
 
 Route::match(['GET', 'POST'], '/payments/{method}/callback', [PaymentCallbackController::class, 'handle'])

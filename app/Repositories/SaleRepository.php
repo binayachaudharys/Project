@@ -14,6 +14,8 @@ use App\Models\Sale;
 use App\Models\Service;
 use App\Models\StockMovement;
 use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -27,6 +29,32 @@ class SaleRepository extends BaseRepository
     public function __construct(Sale $model)
     {
         parent::__construct($model);
+    }
+
+    /**
+     * Paid sales within an inclusive calendar date range (local app timezone).
+     *
+     * @return array{sales: EloquentCollection<int, Sale>, total: float}
+     */
+    public function paidSalesInRange(Carbon $from, Carbon $to): array
+    {
+        $sales = $this->model->newQuery()
+            ->where('status', SaleStatus::Paid)
+            ->whereBetween('created_at', [
+                $from->copy()->startOfDay(),
+                $to->copy()->endOfDay(),
+            ])
+            ->with(['customer:id,name', 'staff:id,name'])
+            ->orderByDesc('created_at')
+            ->get([
+                'id', 'sale_number', 'customer_id', 'staff_id',
+                'subtotal', 'discount', 'total', 'status', 'created_at',
+            ]);
+
+        return [
+            'sales' => $sales,
+            'total' => round((float) $sales->sum('total'), 2),
+        ];
     }
 
     /**
