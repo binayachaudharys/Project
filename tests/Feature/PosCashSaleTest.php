@@ -202,4 +202,40 @@ class PosCashSaleTest extends TestCase
 
         $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'pending_payment']);
     }
+
+    public function test_voiding_twice_does_not_double_restore_stock(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $owner = User::factory()->owner()->create();
+        $product = Product::factory()->create(['stock_qty' => 10, 'price' => 100]);
+
+        $this->actingAs($staff)->post(route('pos.checkout'), [
+            'discount' => 0,
+            'payment_method' => 'cash',
+            'items' => [
+                ['item_type' => 'product', 'item_id' => $product->id, 'qty' => 3],
+            ],
+        ])->assertRedirect();
+
+        $sale = Sale::firstOrFail();
+
+        $this->actingAs($owner)
+            ->post(route('pos.sales.void', $sale))
+            ->assertRedirect();
+
+        $this->actingAs($owner)
+            ->post(route('pos.sales.void', $sale))
+            ->assertSessionHasErrors('sale');
+
+        $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'void']);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock_qty' => 10]);
+        $this->assertDatabaseCount('stock_movements', 2); // sale deduct + one void restore
+        $this->assertEquals(
+            1,
+            \App\Models\StockMovement::query()
+                ->where('sale_id', $sale->id)
+                ->where('reason', 'void_restore')
+                ->count()
+        );
+    }
 }

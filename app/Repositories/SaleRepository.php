@@ -113,10 +113,15 @@ class SaleRepository extends BaseRepository
     /**
      * Void a paid sale: restores product stock line by line and marks the
      * sale `void`. Throws if the sale isn't currently paid.
+     *
+     * Locks the sale row before the status check so concurrent void requests
+     * cannot both restore stock (double-void race).
      */
     public function voidPaidSale(Sale $sale, User $actor): Sale
     {
         return DB::transaction(function () use ($sale, $actor) {
+            $sale = $this->model->newQuery()->lockForUpdate()->findOrFail($sale->id);
+
             if ($sale->status !== SaleStatus::Paid) {
                 throw ValidationException::withMessages([
                     'sale' => 'Only paid sales can be voided.',

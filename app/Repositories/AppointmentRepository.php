@@ -7,6 +7,7 @@ use App\Enums\BookableType;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\Setting;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -22,12 +23,8 @@ class AppointmentRepository extends BaseRepository
     /**
      * Whether a staff member already has a non-cancelled appointment
      * overlapping the given window.
-     *
-     * `$lockForUpdate` should only be set when called inside the
-     * `createBooking` transaction, to serialize concurrent booking
-     * attempts for the same staff member/slot.
      */
-    public function hasStaffConflict(int $staffId, Carbon $start, Carbon $end, ?int $ignoreId = null, bool $lockForUpdate = false): bool
+    public function hasStaffConflict(int $staffId, Carbon $start, Carbon $end, ?int $ignoreId = null): bool
     {
         return $this->model->newQuery()
             ->where('staff_id', $staffId)
@@ -35,12 +32,15 @@ class AppointmentRepository extends BaseRepository
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
-            ->when($lockForUpdate, fn ($q) => $q->lockForUpdate())
             ->exists();
     }
 
     /**
      * Create a customer booking with overlap and capacity validation.
+     *
+     * Concurrent empty-slot races are serialized by locking a stable row
+     * before conflict checks: the staff user when assigned, otherwise the
+     * `max_concurrent` settings row (salon capacity mutex).
      */
     public function createBooking(array $data): Appointment
     {
@@ -51,16 +51,25 @@ class AppointmentRepository extends BaseRepository
 
             $this->assertWithinSalonHours($start, $end);
 
-            if (! empty($data['staff_id']) && $this->hasStaffConflict((int) $data['staff_id'], $start, $end, lockForUpdate: true)) {
-                throw ValidationException::withMessages([
-                    'starts_at' => 'That staff member is already booked for this time.',
-                ]);
-            }
+            if (! empty($data['staff_id'])) {
+                // Empty lockForUpdate result sets do not block peers; hold the
+                // staff user row so concurrent bookings for the same stylist
+                // serialize even when no overlapping appointments exist yet.
+                User::query()->whereKey((int) $data['staff_id'])->lockForUpdate()->firstOrFail();
 
-            if (empty($data['staff_id']) && $this->exceedsSalonCapacity($start, $end)) {
-                throw ValidationException::withMessages([
-                    'starts_at' => 'No chairs available for this time.',
-                ]);
+                if ($this->hasStaffConflict((int) $data['staff_id'], $start, $end)) {
+                    throw ValidationException::withMessages([
+                        'starts_at' => 'That staff member is already booked for this time.',
+                    ]);
+                }
+            } else {
+                $this->lockSalonCapacitySetting();
+
+                if ($this->exceedsSalonCapacity($start, $end)) {
+                    throw ValidationException::withMessages([
+                        'starts_at' => 'No chairs available for this time.',
+                    ]);
+                }
             }
 
             $autoConfirm = Setting::resolveBool('auto_confirm', true);
@@ -76,6 +85,32 @@ class AppointmentRepository extends BaseRepository
                 'notes' => $data['notes'] ?? null,
             ]);
         });
+    }
+
+    /**
+     * Ensure a lockable `max_concurrent` settings row and hold it for the
+     * rest of the booking transaction (capacity serialization).
+     */
+    protected function lockSalonCapacitySetting(): void
+    {
+        $setting = Setting::query()
+            ->where('key', 'max_concurrent')
+            ->lockForUpdate()
+            ->first();
+
+        if ($setting !== null) {
+            return;
+        }
+
+        Setting::query()->firstOrCreate(
+            ['key' => 'max_concurrent'],
+            ['value' => (string) config('salon.max_concurrent', 1)],
+        );
+
+        Setting::query()
+            ->where('key', 'max_concurrent')
+            ->lockForUpdate()
+            ->firstOrFail();
     }
 
     /**
@@ -133,8 +168,8 @@ class AppointmentRepository extends BaseRepository
      * When no staff is chosen, cap the number of concurrent unstaffed
      * appointments overlapping the slot (i.e. available chairs).
      *
-     * Only called from within the `createBooking` transaction, so the
-     * overlapping rows are locked to serialize concurrent capacity checks.
+     * Callers must already hold {@see lockSalonCapacitySetting()} so
+     * concurrent empty-slot bookings cannot both pass this check.
      */
     protected function exceedsSalonCapacity(Carbon $start, Carbon $end): bool
     {
@@ -144,7 +179,6 @@ class AppointmentRepository extends BaseRepository
             ->whereNotIn('status', [AppointmentStatus::Cancelled->value])
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
-            ->lockForUpdate()
             ->count();
 
         return $overlapping >= $max;

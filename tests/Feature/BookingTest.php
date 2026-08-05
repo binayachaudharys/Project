@@ -180,6 +180,59 @@ class BookingTest extends TestCase
             ->assertSessionHasErrors('starts_at');
     }
 
+    public function test_capacity_booking_creates_max_concurrent_setting_when_missing(): void
+    {
+        // Ensures lockSalonCapacitySetting can firstOrCreate + lock the row
+        // when no settings seed is present (empty-slot serialization path).
+        $this->assertDatabaseMissing('settings', ['key' => 'max_concurrent']);
+
+        $customer = User::factory()->customer()->create();
+        $service = Service::factory()->create(['duration_minutes' => 60, 'is_active' => true]);
+        $starts = now()->next('Wednesday')->setTime(11, 0);
+
+        $this->actingAs($customer)
+            ->post(route('book.store'), [
+                'bookable_type' => 'service',
+                'bookable_id' => $service->id,
+                'starts_at' => $starts->toIso8601String(),
+                'staff_id' => null,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('settings', ['key' => 'max_concurrent']);
+        $this->assertDatabaseCount('appointments', 1);
+    }
+
+    public function test_sequential_staff_bookings_for_same_slot_rejects_second(): void
+    {
+        // Sequential stand-in for the empty-slot race: both requests see no
+        // overlap until the first commits; second must still conflict after.
+        $customers = User::factory()->customer()->count(2)->create();
+        $staff = User::factory()->staff()->create();
+        $service = Service::factory()->create(['duration_minutes' => 60, 'is_active' => true]);
+        $starts = now()->next('Thursday')->setTime(11, 0);
+
+        $this->actingAs($customers[0])
+            ->post(route('book.store'), [
+                'bookable_type' => 'service',
+                'bookable_id' => $service->id,
+                'starts_at' => $starts->toIso8601String(),
+                'staff_id' => $staff->id,
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($customers[1])
+            ->post(route('book.store'), [
+                'bookable_type' => 'service',
+                'bookable_id' => $service->id,
+                'starts_at' => $starts->toIso8601String(),
+                'staff_id' => $staff->id,
+            ])
+            ->assertSessionHasErrors('starts_at');
+
+        $this->assertDatabaseCount('appointments', 1);
+    }
+
     public function test_booking_rejects_inactive_service(): void
     {
         $customer = User::factory()->customer()->create();
