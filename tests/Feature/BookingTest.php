@@ -70,6 +70,51 @@ class BookingTest extends TestCase
         ]);
     }
 
+    public function test_booking_is_pending_when_auto_confirm_disabled(): void
+    {
+        Setting::create(['key' => 'auto_confirm', 'value' => '0']);
+
+        $customer = User::factory()->customer()->create();
+        $service = Service::factory()->create(['duration_minutes' => 60, 'is_active' => true]);
+        $starts = now()->next('Wednesday')->setTime(11, 0);
+
+        $this->actingAs($customer)
+            ->post(route('book.store'), [
+                'bookable_type' => 'service',
+                'bookable_id' => $service->id,
+                'starts_at' => $starts->toIso8601String(),
+                'staff_id' => null,
+                'notes' => null,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('appointments', [
+            'customer_id' => $customer->id,
+            'bookable_type' => 'service',
+            'bookable_id' => $service->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_booking_rejects_staff_id_for_non_staff_user(): void
+    {
+        $customer = User::factory()->customer()->create();
+        $notStaff = User::factory()->customer()->create();
+        $service = Service::factory()->create(['duration_minutes' => 60]);
+        $starts = now()->next('Wednesday')->setTime(11, 0);
+
+        $this->actingAs($customer)
+            ->post(route('book.store'), [
+                'bookable_type' => 'service',
+                'bookable_id' => $service->id,
+                'starts_at' => $starts->toIso8601String(),
+                'staff_id' => $notStaff->id,
+            ])
+            ->assertSessionHasErrors('staff_id');
+
+        $this->assertDatabaseCount('appointments', 0);
+    }
+
     public function test_booking_rejects_staff_overlap(): void
     {
         $customer = User::factory()->customer()->create();
@@ -184,6 +229,39 @@ class BookingTest extends TestCase
         $this->assertDatabaseHas('appointments', [
             'id' => $appointment->id,
             'status' => 'cancelled',
+        ]);
+    }
+
+    public function test_customer_cannot_cancel_already_cancelled_appointment(): void
+    {
+        $customer = User::factory()->customer()->create();
+        $appointment = Appointment::factory()->create([
+            'customer_id' => $customer->id,
+            'status' => AppointmentStatus::Cancelled,
+        ]);
+
+        $this->actingAs($customer)
+            ->delete(route('account.appointments.cancel', $appointment))
+            ->assertSessionHasErrors('appointment');
+    }
+
+    public function test_customer_cannot_cancel_past_appointment(): void
+    {
+        $customer = User::factory()->customer()->create();
+        $appointment = Appointment::factory()->create([
+            'customer_id' => $customer->id,
+            'status' => AppointmentStatus::Confirmed,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->subDay()->addHour(),
+        ]);
+
+        $this->actingAs($customer)
+            ->delete(route('account.appointments.cancel', $appointment))
+            ->assertSessionHasErrors('appointment');
+
+        $this->assertDatabaseHas('appointments', [
+            'id' => $appointment->id,
+            'status' => 'confirmed',
         ]);
     }
 

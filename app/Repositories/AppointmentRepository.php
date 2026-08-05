@@ -22,8 +22,12 @@ class AppointmentRepository extends BaseRepository
     /**
      * Whether a staff member already has a non-cancelled appointment
      * overlapping the given window.
+     *
+     * `$lockForUpdate` should only be set when called inside the
+     * `createBooking` transaction, to serialize concurrent booking
+     * attempts for the same staff member/slot.
      */
-    public function hasStaffConflict(int $staffId, Carbon $start, Carbon $end, ?int $ignoreId = null): bool
+    public function hasStaffConflict(int $staffId, Carbon $start, Carbon $end, ?int $ignoreId = null, bool $lockForUpdate = false): bool
     {
         return $this->model->newQuery()
             ->where('staff_id', $staffId)
@@ -31,6 +35,7 @@ class AppointmentRepository extends BaseRepository
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
+            ->when($lockForUpdate, fn ($q) => $q->lockForUpdate())
             ->exists();
     }
 
@@ -46,7 +51,7 @@ class AppointmentRepository extends BaseRepository
 
             $this->assertWithinSalonHours($start, $end);
 
-            if (! empty($data['staff_id']) && $this->hasStaffConflict((int) $data['staff_id'], $start, $end)) {
+            if (! empty($data['staff_id']) && $this->hasStaffConflict((int) $data['staff_id'], $start, $end, lockForUpdate: true)) {
                 throw ValidationException::withMessages([
                     'starts_at' => 'That staff member is already booked for this time.',
                 ]);
@@ -74,10 +79,23 @@ class AppointmentRepository extends BaseRepository
     }
 
     /**
-     * Cancel a customer's own appointment.
+     * Cancel an appointment, enforcing eligibility: it must not already be
+     * cancelled and must start in the future.
      */
     public function cancel(Appointment $appointment): Appointment
     {
+        if ($appointment->status === AppointmentStatus::Cancelled) {
+            throw ValidationException::withMessages([
+                'appointment' => 'This appointment has already been cancelled.',
+            ]);
+        }
+
+        if ($appointment->starts_at->isPast()) {
+            throw ValidationException::withMessages([
+                'appointment' => 'This appointment can no longer be cancelled.',
+            ]);
+        }
+
         $appointment->update(['status' => AppointmentStatus::Cancelled]);
 
         return $appointment->fresh();
@@ -114,6 +132,9 @@ class AppointmentRepository extends BaseRepository
     /**
      * When no staff is chosen, cap the number of concurrent unstaffed
      * appointments overlapping the slot (i.e. available chairs).
+     *
+     * Only called from within the `createBooking` transaction, so the
+     * overlapping rows are locked to serialize concurrent capacity checks.
      */
     protected function exceedsSalonCapacity(Carbon $start, Carbon $end): bool
     {
@@ -123,6 +144,7 @@ class AppointmentRepository extends BaseRepository
             ->whereNotIn('status', [AppointmentStatus::Cancelled->value])
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
+            ->lockForUpdate()
             ->count();
 
         return $overlapping >= $max;

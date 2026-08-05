@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\UserRole;
 use App\Models\Package;
 use App\Models\Service;
 use Illuminate\Foundation\Http\FormRequest;
@@ -24,7 +25,12 @@ class BookAppointmentRequest extends FormRequest
             'bookable_type' => ['required', Rule::in(['service', 'package'])],
             'bookable_id' => ['required', 'integer'],
             'starts_at' => ['required', 'date', 'after:now'],
-            'staff_id' => ['nullable', 'exists:users,id'],
+            'staff_id' => [
+                'nullable',
+                Rule::exists('users', 'id')->where(
+                    fn ($query) => $query->whereIn('role', [UserRole::Staff->value, UserRole::Owner->value])
+                ),
+            ],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Customer;
 
-use App\Enums\AppointmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BookAppointmentRequest;
 use App\Models\Appointment;
@@ -11,6 +10,7 @@ use App\Repositories\PackageRepository;
 use App\Repositories\ServiceRepository;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,11 +51,11 @@ class AppointmentController extends Controller
     {
         abort_unless($appointment->customer_id === $request->user()->id, 403);
 
-        if ($appointment->status === AppointmentStatus::Cancelled || $appointment->starts_at->isPast()) {
-            return back()->withErrors(['appointment' => 'This appointment can no longer be cancelled.']);
+        try {
+            $appointments->cancel($appointment);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
         }
-
-        $appointments->cancel($appointment);
 
         return back()->with('success', 'Appointment cancelled.');
     }
