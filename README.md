@@ -1,5 +1,27 @@
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
+## Pretty Girls Ladies Salon (Task 1 scaffold)
+
+This repo is the **Pretty Girls Ladies Salon** booking app on **Laravel 13** with **Laravel Breeze** (Inertia + React).
+
+- **Timezone:** `APP_TIMEZONE=Asia/Kathmandu` (see `config/app.php`).
+- **Repository layer:** [`jsdecena/baserepo`](https://github.com/jsdecena/baserepo) is installed for shared repo patterns.
+- **Log viewer:** Design called for `arcanedev/log-viewer`, but it does not support Laravel 13. We use **[opcodesio/log-viewer](https://github.com/opcodesio/log-viewer)** instead. Routes are behind the `auth` middleware (no public log access). **Owner-only** access (`role:owner`) is wired in Task 3/8.
+- **POS / payments:** `SALON_PAYMENT_SANDBOX_AUTO` in `.env.example` is a future flag for sandbox POS behavior (optional until payment tasks).
+- **Frontend:** Breeze expects `resources/js/bootstrap.js`; keep the scaffold stub unless you change axios/bootstrap setup.
+
+Local setup (PHP 8.4):
+
+```bash
+export PATH="/opt/homebrew/opt/php@8.4/bin:/opt/homebrew/opt/php@8.4/sbin:$PATH"
+cp .env.example .env && php artisan key:generate
+touch database/database.sqlite && php artisan migrate
+npm install && npm run build
+php artisan serve
+```
+
+Log UI (authenticated users only until Task 3): `/log-viewer`
+
 <p align="center">
 <a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
