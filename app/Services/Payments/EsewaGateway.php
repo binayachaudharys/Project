@@ -61,7 +61,8 @@ class EsewaGateway implements PaymentGatewayInterface
         Log::info('payment.esewa.verify', [
             'keys' => array_keys($data),
             'transaction_uuid' => $data['transaction_uuid'] ?? null,
-            'status' => $data['status'] ?? null,
+            // Client status is never trusted; logged only for diagnostics.
+            'client_status' => $data['status'] ?? null,
         ]);
 
         $idempotencyKey = $data['transaction_uuid'] ?? $request->input('transaction_uuid');
@@ -80,37 +81,122 @@ class EsewaGateway implements PaymentGatewayInterface
             );
         }
 
-        $expectedAmount = number_format((float) $payment->amount, 2, '.', '');
-        $reportedAmount = isset($data['total_amount'])
-            ? number_format((float) str_replace(',', '', (string) $data['total_amount']), 2, '.', '')
-            : null;
+        // Never treat client-only status (e.g. COMPLETE) as paid — always confirm via eSewa status API
+        // using the amount stored on the payment row (not client-supplied amount).
+        $statusCheck = $this->confirmPaidViaStatusApi($payment);
+        $payload = array_merge($data, ['status_api' => $statusCheck['body']]);
 
-        if ($reportedAmount !== null && $reportedAmount !== $expectedAmount) {
+        if (! $statusCheck['ok']) {
             return new VerifyResult(
                 ok: false,
                 idempotencyKey: $idempotencyKey,
-                failureReason: 'Amount mismatch.',
-                payload: $data,
+                failureReason: $statusCheck['failureReason'],
+                payload: $payload,
             );
         }
 
-        if (! $this->statusComplete($payment, $data)) {
-            return new VerifyResult(
-                ok: false,
-                idempotencyKey: $idempotencyKey,
-                failureReason: 'Transaction not complete.',
-                payload: $data,
-            );
-        }
-
-        $reference = (string) ($data['transaction_code'] ?? $data['ref_id'] ?? $data['reference_id'] ?? 'esewa');
+        $body = $statusCheck['body'];
+        $reference = (string) ($body['ref_id']
+            ?? $body['transaction_code']
+            ?? $body['reference_id']
+            ?? $data['transaction_code']
+            ?? $data['ref_id']
+            ?? 'esewa');
 
         return new VerifyResult(
             ok: true,
             idempotencyKey: $idempotencyKey,
             gatewayReference: $reference,
-            payload: $data,
+            payload: $payload,
         );
+    }
+
+    /**
+     * Server-side status enquiry. Client callback status is ignored.
+     *
+     * @return array{ok: bool, failureReason: string, body: array<string, mixed>}
+     */
+    protected function confirmPaidViaStatusApi(Payment $payment): array
+    {
+        $merchantCode = (string) config('payments.esewa.merchant_code');
+        $expectedAmount = number_format((float) $payment->amount, 2, '.', '');
+        $statusUrl = (string) config('payments.esewa.status_url');
+
+        if ($merchantCode === '' || $statusUrl === '') {
+            return [
+                'ok' => false,
+                'failureReason' => 'eSewa status verification is not configured.',
+                'body' => [],
+            ];
+        }
+
+        try {
+            $response = $this->http->get($statusUrl, [
+                'product_code' => $merchantCode,
+                'total_amount' => $expectedAmount,
+                'transaction_uuid' => $payment->idempotency_key,
+            ]);
+        } catch (\Throwable $e) {
+            Log::info('payment.esewa.verify', [
+                'status_check_failed' => true,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [
+                'ok' => false,
+                'failureReason' => 'eSewa status API unavailable.',
+                'body' => [],
+            ];
+        }
+
+        $body = is_array($response->json()) ? $response->json() : [];
+
+        Log::info('payment.esewa.verify', [
+            'status_http' => $response->status(),
+            'status_body' => $body,
+        ]);
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'failureReason' => 'eSewa status API request failed.',
+                'body' => $body,
+            ];
+        }
+
+        $remoteStatus = strtoupper((string) ($body['status'] ?? $body['transaction_status'] ?? ''));
+        if (! in_array($remoteStatus, ['COMPLETE', 'COMPLETED', 'SUCCESS'], true)) {
+            return [
+                'ok' => false,
+                'failureReason' => 'Transaction not complete.',
+                'body' => $body,
+            ];
+        }
+
+        // Fail-closed: gateway must return amount, and it must match payment.amount.
+        $rawAmount = $body['total_amount'] ?? $body['amount'] ?? null;
+        if ($rawAmount === null || $rawAmount === '') {
+            return [
+                'ok' => false,
+                'failureReason' => 'Amount missing from gateway response.',
+                'body' => $body,
+            ];
+        }
+
+        $reportedAmount = number_format((float) str_replace(',', '', (string) $rawAmount), 2, '.', '');
+        if ($reportedAmount !== $expectedAmount) {
+            return [
+                'ok' => false,
+                'failureReason' => 'Amount mismatch.',
+                'body' => $body,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'failureReason' => '',
+            'body' => $body,
+        ];
     }
 
     /**
@@ -130,46 +216,6 @@ class EsewaGateway implements PaymentGatewayInterface
         }
 
         return $request->all();
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    protected function statusComplete(Payment $payment, array $data): bool
-    {
-        $status = strtoupper((string) ($data['status'] ?? ''));
-        if (in_array($status, ['COMPLETE', 'COMPLETED', 'SUCCESS'], true)) {
-            return true;
-        }
-
-        $merchantCode = (string) config('payments.esewa.merchant_code');
-        $amount = number_format((float) $payment->amount, 2, '.', '');
-        $statusUrl = (string) config('payments.esewa.status_url');
-
-        try {
-            $response = $this->http->get($statusUrl, [
-                'product_code' => $merchantCode,
-                'total_amount' => $amount,
-                'transaction_uuid' => $payment->idempotency_key,
-            ]);
-        } catch (\Throwable $e) {
-            Log::info('payment.esewa.verify', [
-                'status_check_failed' => true,
-                'message' => $e->getMessage(),
-            ]);
-
-            return false;
-        }
-
-        $body = $response->json() ?? [];
-        Log::info('payment.esewa.verify', [
-            'status_http' => $response->status(),
-            'status_body' => $body,
-        ]);
-
-        $remoteStatus = strtoupper((string) ($body['status'] ?? $body['transaction_status'] ?? ''));
-
-        return $response->successful() && in_array($remoteStatus, ['COMPLETE', 'COMPLETED', 'SUCCESS'], true);
     }
 
     protected function sign(string $message): string

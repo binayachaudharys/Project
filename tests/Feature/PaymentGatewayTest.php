@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Payments\EsewaGateway;
 use App\Services\Payments\VerifyResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Mockery;
 use Tests\TestCase;
@@ -25,6 +26,12 @@ class PaymentGatewayTest extends TestCase
         parent::setUp();
 
         $this->withoutVite();
+
+        config([
+            'payments.esewa.merchant_code' => 'EPAYTEST',
+            'payments.esewa.secret' => 'test-secret',
+            'payments.esewa.status_url' => 'https://rc.esewa.com.np/api/epay/transaction/status/',
+        ]);
     }
 
     public function test_verify_marks_sale_paid_once(): void
@@ -177,5 +184,122 @@ class PaymentGatewayTest extends TestCase
         $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'pending_payment']);
         $this->assertDatabaseHas('payments', ['idempotency_key' => $idempotencyKey, 'status' => 'failed']);
         $this->assertDatabaseHas('products', ['id' => $product->id, 'stock_qty' => 3]);
+    }
+
+    public function test_forged_esewa_callback_status_complete_does_not_mark_paid(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $product = Product::factory()->create(['stock_qty' => 4, 'price' => 75]);
+
+        $sale = Sale::query()->create([
+            'sale_number' => 'PGS-'.now()->format('Ymd').'-0004',
+            'staff_id' => $staff->id,
+            'subtotal' => 75,
+            'discount' => 0,
+            'total' => 75,
+            'status' => SaleStatus::PendingPayment,
+        ]);
+
+        $idempotencyKey = (string) Str::uuid();
+        $sale->payments()->create([
+            'method' => PaymentMethod::Esewa,
+            'amount' => 75,
+            'status' => PaymentStatus::Pending,
+            'idempotency_key' => $idempotencyKey,
+        ]);
+
+        // Status API says not complete (or fails) — client status=COMPLETE must be ignored.
+        Http::fake([
+            'rc.esewa.com.np/*' => Http::response([
+                'status' => 'PENDING',
+                'total_amount' => '75.00',
+            ], 200),
+        ]);
+
+        $this->post(route('payments.callback', ['method' => 'esewa']), [
+            'transaction_uuid' => $idempotencyKey,
+            'status' => 'COMPLETE',
+            'total_amount' => '75.00',
+            'transaction_code' => 'FORGED',
+        ])
+            ->assertOk()
+            ->assertJson(['ok' => false]);
+
+        Http::assertSent(function ($request) use ($idempotencyKey) {
+            return str_contains($request->url(), 'rc.esewa.com.np')
+                && $request['transaction_uuid'] === $idempotencyKey
+                && $request['total_amount'] === '75.00'
+                && $request['product_code'] === 'EPAYTEST';
+        });
+
+        $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'pending_payment']);
+        $this->assertDatabaseHas('payments', [
+            'idempotency_key' => $idempotencyKey,
+            'status' => 'failed',
+        ]);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock_qty' => 4]);
+    }
+
+    public function test_esewa_status_api_success_marks_paid(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $product = Product::factory()->create(['stock_qty' => 6, 'price' => 120]);
+
+        $sale = Sale::query()->create([
+            'sale_number' => 'PGS-'.now()->format('Ymd').'-0005',
+            'staff_id' => $staff->id,
+            'subtotal' => 120,
+            'discount' => 0,
+            'total' => 120,
+            'status' => SaleStatus::PendingPayment,
+        ]);
+
+        $sale->items()->create([
+            'item_type' => ItemType::Product->value,
+            'item_id' => $product->id,
+            'name_snapshot' => $product->name,
+            'qty' => 1,
+            'unit_price' => 120,
+            'line_total' => 120,
+        ]);
+
+        $idempotencyKey = (string) Str::uuid();
+        $sale->payments()->create([
+            'method' => PaymentMethod::Esewa,
+            'amount' => 120,
+            'status' => PaymentStatus::Pending,
+            'idempotency_key' => $idempotencyKey,
+        ]);
+
+        Http::fake([
+            'rc.esewa.com.np/*' => Http::response([
+                'status' => 'COMPLETE',
+                'total_amount' => '120.00',
+                'ref_id' => 'ESEWA-REF-99',
+                'transaction_uuid' => $idempotencyKey,
+            ], 200),
+        ]);
+
+        $this->post(route('payments.callback', ['method' => 'esewa']), [
+            'transaction_uuid' => $idempotencyKey,
+            // Client may omit status or forge it — status API is the source of truth.
+            'status' => 'PENDING',
+        ])
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        Http::assertSent(function ($request) use ($idempotencyKey) {
+            return str_contains($request->url(), 'rc.esewa.com.np')
+                && $request['transaction_uuid'] === $idempotencyKey
+                && $request['total_amount'] === '120.00';
+        });
+
+        $this->assertDatabaseHas('sales', ['id' => $sale->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('payments', [
+            'idempotency_key' => $idempotencyKey,
+            'status' => 'completed',
+            'gateway_reference' => 'ESEWA-REF-99',
+        ]);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock_qty' => 5]);
     }
 }

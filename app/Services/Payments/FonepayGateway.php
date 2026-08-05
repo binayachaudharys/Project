@@ -149,25 +149,32 @@ class FonepayGateway implements PaymentGatewayInterface
         $status = strtoupper((string) ($body['paymentStatus'] ?? $body['status'] ?? ''));
         $success = $response->successful() && in_array($status, ['SUCCESS', 'SUCCESSFUL', 'COMPLETE', 'COMPLETED', 'PAID'], true);
 
-        // Never trust client amount — check gateway amount against payment.amount when present.
-        if (isset($body['amount'])) {
-            $reported = number_format((float) $body['amount'], 2, '.', '');
-            $expected = number_format((float) $payment->amount, 2, '.', '');
-            if ($reported !== $expected) {
-                return new VerifyResult(
-                    ok: false,
-                    idempotencyKey: $prn,
-                    failureReason: 'Amount mismatch.',
-                    payload: $body,
-                );
-            }
-        }
-
         if (! $success) {
             return new VerifyResult(
                 ok: false,
                 idempotencyKey: $prn,
                 failureReason: 'Payment not successful.',
+                payload: $body,
+            );
+        }
+
+        // Fail-closed: gateway must return amount matching payment.amount.
+        if (! array_key_exists('amount', $body) || $body['amount'] === null || $body['amount'] === '') {
+            return new VerifyResult(
+                ok: false,
+                idempotencyKey: $prn,
+                failureReason: 'Amount missing from gateway response.',
+                payload: $body,
+            );
+        }
+
+        $reported = number_format((float) $body['amount'], 2, '.', '');
+        $expected = number_format((float) $payment->amount, 2, '.', '');
+        if ($reported !== $expected) {
+            return new VerifyResult(
+                ok: false,
+                idempotencyKey: $prn,
+                failureReason: 'Amount mismatch.',
                 payload: $body,
             );
         }

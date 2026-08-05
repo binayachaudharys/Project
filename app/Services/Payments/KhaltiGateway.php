@@ -118,24 +118,34 @@ class KhaltiGateway implements PaymentGatewayInterface
             );
         }
 
-        $expectedPaisa = (int) round(((float) $payment->amount) * 100);
-        $reportedPaisa = isset($body['total_amount']) ? (int) $body['total_amount'] : null;
-
-        if ($reportedPaisa !== null && $reportedPaisa !== $expectedPaisa) {
-            return new VerifyResult(
-                ok: false,
-                idempotencyKey: $payment->idempotency_key,
-                failureReason: 'Amount mismatch.',
-                payload: $body,
-            );
-        }
-
         $status = (string) ($body['status'] ?? '');
         if (! $response->successful() || $status !== 'Completed') {
             return new VerifyResult(
                 ok: false,
                 idempotencyKey: $payment->idempotency_key,
                 failureReason: 'Transaction not completed.',
+                payload: $body,
+            );
+        }
+
+        // Fail-closed: gateway must return amount, matching payment.amount (paisa).
+        if (! array_key_exists('total_amount', $body) || $body['total_amount'] === null || $body['total_amount'] === '') {
+            return new VerifyResult(
+                ok: false,
+                idempotencyKey: $payment->idempotency_key,
+                failureReason: 'Amount missing from gateway response.',
+                payload: $body,
+            );
+        }
+
+        $expectedPaisa = (int) round(((float) $payment->amount) * 100);
+        $reportedPaisa = (int) $body['total_amount'];
+
+        if ($reportedPaisa !== $expectedPaisa) {
+            return new VerifyResult(
+                ok: false,
+                idempotencyKey: $payment->idempotency_key,
+                failureReason: 'Amount mismatch.',
                 payload: $body,
             );
         }
