@@ -33,12 +33,20 @@ export default function PublicLayout({ children }) {
                         ))}
 
                         {auth?.user ? (
-                            <Link
-                                href={route('dashboard')}
-                                className="rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-blush-50 transition hover:bg-rose-600"
-                            >
-                                Dashboard
-                            </Link>
+                            <>
+                                <Link
+                                    href={route('account.appointments')}
+                                    className="text-sm font-medium text-charcoal-500 transition hover:text-rose-500"
+                                >
+                                    My Appointments
+                                </Link>
+                                <Link
+                                    href={route('book.create')}
+                                    className="rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-blush-50 transition hover:bg-rose-600"
+                                >
+                                    Book Now
+                                </Link>
+                            </>
                         ) : (
                             <Link
                                 href={route('login')}
