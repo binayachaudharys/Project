@@ -11,8 +11,8 @@ COPY public ./public
 
 RUN npm run build
 
-# Laravel runtime (PHP 8.3 + PostgreSQL)
-FROM php:8.3-cli-bookworm
+# Laravel runtime (PHP 8.4 + PostgreSQL — lock file uses Symfony 8.1 / PHP >=8.4.1)
+FROM php:8.4-cli-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
