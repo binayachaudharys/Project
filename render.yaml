@@ -1,0 +1,36 @@
+# Render Blueprint — Laravel (Docker). Do NOT use Ruby/native; this app is PHP.
+# If you already created a Web Service as Ruby: Settings → Runtime → Docker,
+# Dockerfile Path = ./Dockerfile, then redeploy.
+#
+# Link your existing Postgres under Environment → Add from Database.
+
+services:
+  - type: web
+    name: pretty-salon
+    runtime: docker
+    plan: free
+    branch: feat/mvp
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_SSLMODE
+        value: require
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: APP_TIMEZONE
+        value: Asia/Kathmandu
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
