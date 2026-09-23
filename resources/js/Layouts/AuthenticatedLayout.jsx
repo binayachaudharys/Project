@@ -24,12 +24,49 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
 
                             <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                                <NavLink
-                                    href={route('dashboard')}
-                                    active={route().current('dashboard')}
-                                >
-                                    Dashboard
-                                </NavLink>
+                                {(user.role === 'staff' ||
+                                    user.role === 'owner') && (
+                                    <>
+                                        <NavLink
+                                            href={route('staff.today')}
+                                            active={route().current(
+                                                'staff.today',
+                                            )}
+                                        >
+                                            Today
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('staff.billing.index')}
+                                            active={route().current(
+                                                'staff.billing.*',
+                                            )}
+                                        >
+                                            Billing
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('pos.index')}
+                                            active={route().current('pos.*')}
+                                        >
+                                            New invoice
+                                        </NavLink>
+                                    </>
+                                )}
+                                {user.role === 'owner' && (
+                                    <NavLink
+                                        href={route('admin.dashboard')}
+                                        active={route().current('admin.*')}
+                                    >
+                                        Admin
+                                    </NavLink>
+                                )}
+                                {user.role === 'customer' && (
+                                    <NavLink
+                                        href={route('dashboard')}
+                                        active={route().current('dashboard')}
+                                    >
+                                        Dashboard
+                                    </NavLink>
+                                )}
                             </div>
                         </div>
 
@@ -128,12 +165,44 @@ export default function AuthenticatedLayout({ header, children }) {
                     }
                 >
                     <div className="space-y-1 pb-3 pt-2">
-                        <ResponsiveNavLink
-                            href={route('dashboard')}
-                            active={route().current('dashboard')}
-                        >
-                            Dashboard
-                        </ResponsiveNavLink>
+                        {(user.role === 'staff' || user.role === 'owner') && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('staff.today')}
+                                    active={route().current('staff.today')}
+                                >
+                                    Today
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('staff.billing.index')}
+                                    active={route().current('staff.billing.*')}
+                                >
+                                    Billing
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('pos.index')}
+                                    active={route().current('pos.*')}
+                                >
+                                    New invoice
+                                </ResponsiveNavLink>
+                            </>
+                        )}
+                        {user.role === 'owner' && (
+                            <ResponsiveNavLink
+                                href={route('admin.dashboard')}
+                                active={route().current('admin.*')}
+                            >
+                                Admin
+                            </ResponsiveNavLink>
+                        )}
+                        {user.role === 'customer' && (
+                            <ResponsiveNavLink
+                                href={route('dashboard')}
+                                active={route().current('dashboard')}
+                            >
+                                Dashboard
+                            </ResponsiveNavLink>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 pb-1 pt-4">
@@ -170,7 +239,9 @@ export default function AuthenticatedLayout({ header, children }) {
                 </header>
             )}
 
-            <main>{children}</main>
+            <main id="main-content" tabIndex={-1}>
+                {children}
+            </main>
         </div>
     );
 }

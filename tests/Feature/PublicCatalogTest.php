@@ -22,7 +22,9 @@ class PublicCatalogTest extends TestCase
     {
         $this->get('/')->assertOk()->assertInertia(fn ($page) => $page
             ->component('Home')
-            ->where('salonName', 'Pretty Girls Ladies Salon')
+            ->where('salon.name', config('salon.name'))
+            ->has('salon.menu')
+            ->has('services')
         );
     }
 
@@ -49,6 +51,7 @@ class PublicCatalogTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Packages/Index')
                 ->has('packages', 1)
+                ->has('menu')
             );
     }
 

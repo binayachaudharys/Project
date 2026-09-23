@@ -39,6 +39,23 @@ class HandleInertiaRequests extends Middleware
                 'payment_initiate' => $request->session()->get('payment_initiate'),
                 'pending_sale_id' => $request->session()->get('pending_sale_id'),
             ],
+            'salonContact' => [
+                'name' => config('salon.name'),
+                'tagline' => config('salon.tagline'),
+                'address' => config('salon.address'),
+                'phone' => config('salon.phone'),
+                'whatsapp' => config('salon.whatsapp'),
+                'instagram' => config('salon.instagram'),
+                'facebook' => config('salon.facebook'),
+                'tiktok' => config('salon.tiktok'),
+                'promo' => config('salon.promo'),
+                'logo' => config('salon.logo'),
+                'open' => config('salon.salon_open'),
+                'close' => config('salon.salon_close'),
+                'menu' => config('salon.menu'),
+                'location' => config('salon.location'),
+                'currency' => config('salon.currency', 'Rs'),
+            ],
         ];
     }
 }

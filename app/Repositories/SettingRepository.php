@@ -16,6 +16,9 @@ class SettingRepository extends BaseRepository
         'package_duration',
         'auto_confirm',
         'max_concurrent',
+        'vat_enabled',
+        'vat_rate',
+        'vat_inclusive',
     ];
 
     public function __construct(Setting $model)
@@ -35,7 +38,10 @@ class SettingRepository extends BaseRepository
         foreach (self::MANAGED_KEYS as $key) {
             $values[$key] = match ($key) {
                 'auto_confirm' => Setting::resolveBool($key, (bool) config("salon.{$key}", true)),
+                'vat_enabled' => Setting::resolveBool($key, true),
+                'vat_inclusive' => Setting::resolveBool($key, false),
                 'slot_minutes', 'package_duration', 'max_concurrent' => (int) Setting::resolve($key, config("salon.{$key}")),
+                'vat_rate' => (float) Setting::resolve($key, 13),
                 default => (string) Setting::resolve($key, config("salon.{$key}")),
             };
         }
@@ -58,7 +64,7 @@ class SettingRepository extends BaseRepository
             }
 
             $value = $data[$key];
-            if ($key === 'auto_confirm') {
+            if (in_array($key, ['auto_confirm', 'vat_enabled', 'vat_inclusive'], true)) {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
             } else {
                 $value = (string) $value;

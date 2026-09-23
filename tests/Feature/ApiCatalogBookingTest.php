@@ -82,6 +82,6 @@ class ApiCatalogBookingTest extends TestCase
         $this->actingAs($customer)
             ->postJson('/api/v1/bookings', [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['bookable_type', 'bookable_id', 'starts_at']);
+            ->assertJsonValidationErrors(['items', 'starts_at']);
     }
 }

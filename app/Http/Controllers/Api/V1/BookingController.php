@@ -11,13 +11,13 @@ class BookingController extends Controller
 {
     public function store(BookAppointmentRequest $request, AppointmentRepository $appointments): JsonResponse
     {
-        $appointment = $appointments->createBooking([
+        $created = $appointments->createBookings([
             ...$request->validated(),
             'customer_id' => $request->user()->id,
         ]);
 
         return response()->json([
-            'data' => $appointment,
+            'data' => count($created) === 1 ? $created[0] : $created,
         ], 201);
     }
 }

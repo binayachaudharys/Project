@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\BillingController as AdminBillingController;
+use App\Http\Controllers\Admin\BookingController as AdminBookingController;
 use App\Http\Controllers\Admin\PackageController as AdminPackageController;
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Admin\SalesReportController;
@@ -25,6 +27,14 @@ Route::get('/packages', [PackageCatalogController::class, 'index'])->name('packa
 Route::get('/packages/{package}', [PackageCatalogController::class, 'show'])->name('packages.show');
 
 Route::get('/dashboard', function () {
+    $user = auth()->user();
+    if ($user) {
+        $home = $user->homeRoute();
+        if ($home !== 'dashboard') {
+            return redirect()->route($home);
+        }
+    }
+
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -52,6 +62,16 @@ Route::middleware(['auth', 'role:owner'])->prefix('admin')->name('admin.')->grou
     Route::get('staff', [AdminStaffController::class, 'index'])->name('staff.index');
     Route::post('staff', [AdminStaffController::class, 'store'])->name('staff.store');
 
+    Route::get('bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
+    Route::post('bookings/{appointment}/status', [AdminBookingController::class, 'updateStatus'])
+        ->name('bookings.status');
+
+    Route::get('billing', [AdminBillingController::class, 'index'])->name('billing.index');
+    Route::get('billing/{sale}/invoice', [AdminBillingController::class, 'invoice'])
+        ->name('billing.invoice');
+    Route::post('billing/{sale}/mark-paid', [AdminBillingController::class, 'markPaid'])
+        ->name('billing.mark-paid');
+
     Route::get('sales', [SalesReportController::class, 'index'])->name('sales.index');
 
     Route::get('settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
@@ -63,6 +83,12 @@ Route::match(['GET', 'POST'], '/payments/{method}/callback', [PaymentCallbackCon
 
 Route::middleware(['auth', 'role:staff,owner'])->group(function () {
     Route::get('/staff/today', [TodayController::class, 'index'])->name('staff.today');
+
+    Route::get('/staff/billing', [AdminBillingController::class, 'index'])->name('staff.billing.index');
+    Route::get('/staff/billing/{sale}/invoice', [AdminBillingController::class, 'invoice'])
+        ->name('staff.billing.invoice');
+    Route::post('/staff/billing/{sale}/mark-paid', [AdminBillingController::class, 'markPaid'])
+        ->name('staff.billing.mark-paid');
 
     Route::prefix('pos')->name('pos.')->group(function () {
         Route::get('/', [PosController::class, 'index'])->name('index');

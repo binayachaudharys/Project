@@ -23,15 +23,20 @@ class UpdateSettingsRequest extends FormRequest
             'package_duration' => ['required', 'integer', 'min:5', 'max:480'],
             'auto_confirm' => ['required', 'boolean'],
             'max_concurrent' => ['required', 'integer', 'min:1', 'max:50'],
+            'vat_enabled' => ['required', 'boolean'],
+            'vat_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'vat_inclusive' => ['required', 'boolean'],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('auto_confirm')) {
-            $this->merge([
-                'auto_confirm' => filter_var($this->input('auto_confirm'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
-            ]);
+        foreach (['auto_confirm', 'vat_enabled', 'vat_inclusive'] as $key) {
+            if ($this->has($key)) {
+                $this->merge([
+                    $key => filter_var($this->input($key), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
+                ]);
+            }
         }
     }
 }

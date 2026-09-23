@@ -26,19 +26,24 @@ class AppointmentController extends Controller
 
     public function store(BookAppointmentRequest $request, AppointmentRepository $appointments): RedirectResponse
     {
-        $appointments->createBooking([
+        $created = $appointments->createBookings([
             ...$request->validated(),
             'customer_id' => $request->user()->id,
         ]);
 
-        return redirect()->route('account.appointments')->with('success', 'Appointment booked.');
+        $count = count($created);
+        $message = $count === 1
+            ? 'Appointment booked.'
+            : "{$count} appointments booked back-to-back.";
+
+        return redirect()->route('account.appointments')->with('success', $message);
     }
 
     public function index(Request $request): Response
     {
         $appointments = $request->user()
             ->appointmentsAsCustomer()
-            ->with('staff:id,name')
+            ->with(['staff:id,name', 'bookable'])
             ->orderByDesc('starts_at')
             ->get(['id', 'staff_id', 'bookable_type', 'bookable_id', 'starts_at', 'ends_at', 'status']);
 

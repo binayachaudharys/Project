@@ -14,6 +14,7 @@ class PackageCatalogController extends Controller
     {
         return Inertia::render('Packages/Index', [
             'packages' => $packages->allActive(),
+            'menu' => config('salon.menu'),
         ]);
     }
 

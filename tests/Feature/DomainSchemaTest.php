@@ -26,7 +26,7 @@ class DomainSchemaTest extends TestCase
             'starts_at', 'ends_at', 'status',
         ]));
         $this->assertTrue(Schema::hasColumns('sales', [
-            'sale_number', 'subtotal', 'discount', 'total', 'status',
+            'sale_number', 'subtotal', 'discount', 'tax', 'tax_rate', 'prices_include_vat', 'total', 'status',
         ]));
         $this->assertTrue(Schema::hasColumns('payments', [
             'method', 'amount', 'status', 'idempotency_key',

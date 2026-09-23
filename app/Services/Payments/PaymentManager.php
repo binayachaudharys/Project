@@ -140,4 +140,51 @@ class PaymentManager
             return $this->sales->finalizePendingSaleAsPaid($sale, $actor);
         });
     }
+
+    /**
+     * Desk "Mark paid" for appointment billing (cash or received digital payment).
+     */
+    public function markPaidAtDesk(Sale $sale, User $actor): Sale
+    {
+        return DB::transaction(function () use ($sale, $actor) {
+            $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
+
+            if ($sale->status === SaleStatus::Paid) {
+                return $sale->fresh(['items', 'payments', 'customer', 'appointment']);
+            }
+
+            if ($sale->status !== SaleStatus::PendingPayment) {
+                throw ValidationException::withMessages([
+                    'sale' => 'Only pending billing sales can be marked paid.',
+                ]);
+            }
+
+            $payment = Payment::query()
+                ->where('sale_id', $sale->id)
+                ->where('status', PaymentStatus::Pending->value)
+                ->lockForUpdate()
+                ->latest('id')
+                ->first();
+
+            if ($payment === null) {
+                $payment = $sale->payments()->create([
+                    'method' => PaymentMethod::Cash,
+                    'amount' => $sale->total,
+                    'status' => PaymentStatus::Pending,
+                    'idempotency_key' => (string) Str::uuid(),
+                ]);
+                $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            }
+
+            $payment->update([
+                'status' => PaymentStatus::Completed,
+                'gateway_payload' => array_merge($payment->gateway_payload ?? [], [
+                    'desk_mark_paid' => true,
+                    'confirmed_by' => $actor->id,
+                ]),
+            ]);
+
+            return $this->sales->finalizePendingSaleAsPaid($sale, $actor);
+        });
+    }
 }

@@ -21,6 +21,28 @@ class AppointmentRepository extends BaseRepository
     }
 
     /**
+     * Update appointment status with simple transition rules for desk staff.
+     */
+    public function updateStatus(Appointment $appointment, AppointmentStatus $status): Appointment
+    {
+        if ($appointment->status === AppointmentStatus::Completed) {
+            throw ValidationException::withMessages([
+                'status' => 'Completed appointments cannot change status.',
+            ]);
+        }
+
+        if ($appointment->status === AppointmentStatus::Cancelled && $status !== AppointmentStatus::Cancelled) {
+            throw ValidationException::withMessages([
+                'status' => 'Cancelled appointments cannot be reopened.',
+            ]);
+        }
+
+        $appointment->update(['status' => $status]);
+
+        return $appointment->fresh();
+    }
+
+    /**
      * Whether a staff member already has a non-cancelled appointment
      * overlapping the given window.
      */
@@ -33,6 +55,37 @@ class AppointmentRepository extends BaseRepository
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
             ->exists();
+    }
+
+    /**
+     * Create one or more customer bookings.
+     *
+     * Multiple items are scheduled back-to-back starting at starts_at.
+     *
+     * @param  array{customer_id:int, items:list<array{bookable_type:string, bookable_id:int}>, starts_at:mixed, staff_id?:int|null, notes?:string|null}  $data
+     * @return list<Appointment>
+     */
+    public function createBookings(array $data): array
+    {
+        return DB::transaction(function () use ($data) {
+            $cursor = Carbon::parse($data['starts_at']);
+            $created = [];
+
+            foreach ($data['items'] as $item) {
+                $created[] = $this->createBooking([
+                    'customer_id' => $data['customer_id'],
+                    'staff_id' => $data['staff_id'] ?? null,
+                    'notes' => $data['notes'] ?? null,
+                    'bookable_type' => $item['bookable_type'],
+                    'bookable_id' => $item['bookable_id'],
+                    'starts_at' => $cursor->toDateTimeString(),
+                ]);
+
+                $cursor = $created[array_key_last($created)]->ends_at->copy();
+            }
+
+            return $created;
+        });
     }
 
     /**

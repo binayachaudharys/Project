@@ -8,12 +8,15 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\SaleStatus;
 use App\Enums\StockReason;
+use App\Models\Appointment;
 use App\Models\Package;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Service;
 use App\Models\StockMovement;
+use App\Models\Setting;
 use App\Models\User;
+use App\Services\NepalVat;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\QueryException;
@@ -29,6 +32,78 @@ class SaleRepository extends BaseRepository
     public function __construct(Sale $model)
     {
         parent::__construct($model);
+    }
+
+    /**
+     * Create a pending-payment sale for a confirmed appointment (desk billing).
+     * Reuses an existing open bill when one is already linked.
+     */
+    public function createBillingFromAppointment(Appointment $appointment, User $actor): Sale
+    {
+        return DB::transaction(function () use ($appointment, $actor) {
+            $appointment = Appointment::query()->lockForUpdate()->findOrFail($appointment->id);
+            $appointment->loadMissing('bookable', 'sale');
+
+            if ($appointment->status === AppointmentStatus::Cancelled) {
+                throw ValidationException::withMessages([
+                    'appointment' => 'Cancelled appointments cannot be billed.',
+                ]);
+            }
+
+            $existing = $appointment->sale;
+            if ($existing && in_array($existing->status, [SaleStatus::PendingPayment, SaleStatus::Paid], true)) {
+                return $existing->fresh(['items', 'payments', 'customer', 'appointment']);
+            }
+
+            $bookable = $appointment->bookable;
+            if ($bookable === null) {
+                throw ValidationException::withMessages([
+                    'appointment' => 'This appointment has no bookable service or package.',
+                ]);
+            }
+
+            $itemType = $appointment->bookable_type instanceof \BackedEnum
+                ? $appointment->bookable_type->value
+                : (string) $appointment->bookable_type;
+
+            $line = $this->buildLine([
+                'item_type' => $itemType,
+                'item_id' => (int) $appointment->bookable_id,
+                'qty' => 1,
+            ]);
+
+            $subtotal = round((float) $line['line_total'], 2);
+            $vat = $this->resolveVat($subtotal, 0);
+
+            $sale = $this->create([
+                'sale_number' => $this->nextSaleNumber(),
+                'customer_id' => $appointment->customer_id,
+                'staff_id' => $actor->id,
+                'appointment_id' => $appointment->id,
+                'subtotal' => $subtotal,
+                'discount' => 0,
+                'tax' => $vat['tax'],
+                'tax_rate' => $vat['rate'],
+                'prices_include_vat' => $vat['inclusive'],
+                'total' => $vat['total'],
+                'status' => SaleStatus::PendingPayment,
+            ]);
+
+            $sale->items()->create($line);
+
+            $sale->payments()->create([
+                'method' => PaymentMethod::Cash,
+                'amount' => $vat['total'],
+                'status' => PaymentStatus::Pending,
+                'idempotency_key' => (string) Str::uuid(),
+            ]);
+
+            if ($appointment->status === AppointmentStatus::Pending) {
+                $appointment->update(['status' => AppointmentStatus::Confirmed]);
+            }
+
+            return $sale->fresh(['items', 'payments', 'customer', 'appointment']);
+        });
     }
 
     /**
@@ -62,7 +137,7 @@ class SaleRepository extends BaseRepository
      * completed immediately (paid + stock deducted); digital methods are
      * left `pending_payment` for the gateway flow (Task 7).
      *
-     * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, items:array<int, array{item_type:string, item_id:int, qty:int}>}  $payload
+     * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, prices_include_vat?:bool|null, items:array<int, array{item_type:string, item_id:int, qty:int, unit_price?:float|string|null}>}  $payload
      */
     public function checkout(array $payload): Sale
     {
@@ -148,7 +223,7 @@ class SaleRepository extends BaseRepository
     }
 
     /**
-     * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, items:array<int, array{item_type:string, item_id:int, qty:int}>}  $payload
+     * @param  array{staff_id:int, customer_id?:int|null, appointment_id?:int|null, discount?:float|string, discount_type?:string, payment_method:string, prices_include_vat?:bool|null, items:array<int, array{item_type:string, item_id:int, qty:int, unit_price?:float|string|null}>}  $payload
      */
     protected function checkoutWithinTransaction(array $payload): Sale
     {
@@ -164,7 +239,13 @@ class SaleRepository extends BaseRepository
                 (float) ($payload['discount'] ?? 0),
                 (string) ($payload['discount_type'] ?? 'amount')
             );
-            $total = round($subtotal - $discount, 2);
+            $vat = $this->resolveVat(
+                $subtotal,
+                $discount,
+                array_key_exists('prices_include_vat', $payload)
+                    ? (bool) $payload['prices_include_vat']
+                    : null,
+            );
 
             $sale = $this->create([
                 'sale_number' => $this->nextSaleNumber(),
@@ -173,7 +254,10 @@ class SaleRepository extends BaseRepository
                 'appointment_id' => $payload['appointment_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
-                'total' => $total,
+                'tax' => $vat['tax'],
+                'tax_rate' => $vat['rate'],
+                'prices_include_vat' => $vat['inclusive'],
+                'total' => $vat['total'],
                 'status' => SaleStatus::Draft,
             ]);
 
@@ -188,7 +272,7 @@ class SaleRepository extends BaseRepository
 
                 $sale->payments()->create([
                     'method' => $method,
-                    'amount' => $total,
+                    'amount' => $vat['total'],
                     'status' => PaymentStatus::Completed,
                     'idempotency_key' => (string) Str::uuid(),
                 ]);
@@ -204,7 +288,7 @@ class SaleRepository extends BaseRepository
 
             $sale->payments()->create([
                 'method' => $method,
-                'amount' => $total,
+                'amount' => $vat['total'],
                 'status' => PaymentStatus::Pending,
                 'idempotency_key' => (string) Str::uuid(),
             ]);
@@ -214,8 +298,11 @@ class SaleRepository extends BaseRepository
     }
 
     /**
-     * Resolve one cart line's server-side name/price and compute its total.
-     * Client-supplied prices are never trusted.
+     * Resolve one cart line. Catalog price is default; optional unit_price
+     * override is allowed for owner/staff invoice pricing.
+     *
+     * @param  array{item_type:string, item_id:int|string, qty:int|string, unit_price?:float|string|null}  $item
+     * @return array{item_type:string, item_id:int, name_snapshot:string, qty:int, unit_price:float, line_total:float}
      */
     protected function buildLine(array $item): array
     {
@@ -228,7 +315,18 @@ class SaleRepository extends BaseRepository
             ItemType::Product->value => Product::findOrFail($itemId),
         };
 
-        $unitPrice = round((float) $sellable->price, 2);
+        $catalogPrice = round((float) $sellable->price, 2);
+        $unitPrice = $catalogPrice;
+
+        if (array_key_exists('unit_price', $item) && $item['unit_price'] !== null && $item['unit_price'] !== '') {
+            $override = round((float) $item['unit_price'], 2);
+            if ($override < 0) {
+                throw ValidationException::withMessages([
+                    'items' => 'Invoice line price cannot be negative.',
+                ]);
+            }
+            $unitPrice = $override;
+        }
 
         return [
             'item_type' => $item['item_type'],
@@ -238,6 +336,18 @@ class SaleRepository extends BaseRepository
             'unit_price' => $unitPrice,
             'line_total' => round($unitPrice * $qty, 2),
         ];
+    }
+
+    /**
+     * @return array{taxable: float, tax: float, total: float, rate: float, inclusive: bool}
+     */
+    protected function resolveVat(float $subtotal, float $discount, ?bool $inclusiveOverride = null): array
+    {
+        $enabled = Setting::resolveBool('vat_enabled', true);
+        $rate = (float) Setting::resolve('vat_rate', NepalVat::DEFAULT_RATE);
+        $inclusive = $inclusiveOverride ?? Setting::resolveBool('vat_inclusive', false);
+
+        return NepalVat::compute($subtotal, $discount, $rate, $inclusive, $enabled);
     }
 
     /**

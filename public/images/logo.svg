@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" role="img" aria-label="Pretty Salon Nepal">
+  <defs>
+    <linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF4DA6"/>
+      <stop offset="100%" stop-color="#E91E8C"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylized P mark -->
+  <path fill="url(#p)" d="M28 18c22 0 40 10 40 34 0 18-10 30-28 34l8 28h-18l-8-28H22V18h6zm12 18H40v30h6c10 0 16-6 16-15s-6-15-16-15z"/>
+  <path fill="url(#p)" opacity=".35" d="M70 22c8-10 22-12 28-2 4 6 2 14-4 20-8 8-18 10-26 6 4-6 6-14 2-24z"/>
+  <text x="108" y="58" font-family="Georgia, 'Times New Roman', serif" font-size="32" font-weight="700" fill="#E91E8C">PREETY Salon</text>
+  <text x="108" y="88" font-family="Manrope, Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.28em" fill="#E91E8C">GIRLS LADIES SALON</text>
+</svg>

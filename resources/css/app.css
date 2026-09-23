@@ -3,10 +3,106 @@
 @tailwind utilities;
 
 :root {
-    --salon-rose: #b24a47;
-    --salon-rose-dark: #8f3634;
-    --salon-blush: #fdf0e9;
-    --salon-cream: #fff9f5;
+    --salon-rose: #e91e8c;
+    --salon-rose-light: #ff4da6;
+    --salon-rose-dark: #c41876;
+    --salon-blush: #fff0f7;
+    --salon-cream: #fff7fb;
     --salon-charcoal: #2c2422;
     --salon-charcoal-soft: #4a3f3b;
+}
+
+@layer base {
+    :focus-visible {
+        outline: 2px solid var(--salon-rose);
+        outline-offset: 3px;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    summary:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: 2px solid var(--salon-rose);
+        outline-offset: 3px;
+    }
+}
+
+@layer components {
+    /* Hidden until keyboard focus — do not use @apply sr-only (can fail to compile). */
+    .skip-link {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+    }
+
+    .skip-link:focus,
+    .skip-link:focus-visible {
+        position: fixed;
+        left: 1rem;
+        top: 1rem;
+        z-index: 100;
+        width: auto;
+        height: auto;
+        margin: 0;
+        clip: auto;
+        overflow: visible;
+        white-space: normal;
+        background-color: var(--salon-rose);
+        color: #fff;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        outline: 2px solid #fff;
+        outline-offset: 2px;
+    }
+}
+
+@layer utilities {
+    .animate-fade-up {
+        animation: fade-up 0.9s ease-out both;
+    }
+
+    .animate-hero-zoom {
+        animation: hero-zoom 18s ease-out both;
+    }
+}
+
+@keyframes fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes hero-zoom {
+    from {
+        transform: scale(1);
+    }
+    to {
+        transform: scale(1.08);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-up,
+    .animate-hero-zoom {
+        animation: none !important;
+    }
+
+    html {
+        scroll-behavior: auto;
+    }
 }

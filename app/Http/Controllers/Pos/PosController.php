@@ -7,11 +7,13 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PosCheckoutRequest;
 use App\Models\Sale;
+use App\Models\Setting;
 use App\Models\User;
 use App\Repositories\PackageRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\SaleRepository;
 use App\Repositories\ServiceRepository;
+use App\Services\NepalVat;
 use App\Services\Payments\GatewayRedirect;
 use App\Services\Payments\PaymentManager;
 use App\Services\Payments\QrPayload;
@@ -32,6 +34,11 @@ class PosController extends Controller
             'services' => $services->allActive(),
             'packages' => $packages->allActive(),
             'products' => $products->allActive(),
+            'vat' => [
+                'enabled' => Setting::resolveBool('vat_enabled', true),
+                'rate' => (float) Setting::resolve('vat_rate', NepalVat::DEFAULT_RATE),
+                'inclusive' => Setting::resolveBool('vat_inclusive', false),
+            ],
         ]);
     }
 
@@ -71,7 +78,13 @@ class PosController extends Controller
         $method = PaymentMethod::from($request->validated('payment_method'));
 
         if ($method === PaymentMethod::Cash) {
-            return redirect()->route('pos.index')->with('success', 'Sale completed.');
+            $invoiceRoute = $request->user()?->role === UserRole::Owner
+                ? 'admin.billing.invoice'
+                : 'staff.billing.invoice';
+
+            return redirect()
+                ->route($invoiceRoute, ['sale' => $sale, 'print' => 1])
+                ->with('success', 'Sale completed.');
         }
 
         $payment = $sale->payments()->latest('id')->first();

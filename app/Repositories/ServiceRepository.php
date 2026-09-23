@@ -17,24 +17,27 @@ class ServiceRepository extends BaseRepository
     {
         return $this->model->newQuery()
             ->where('is_active', true)
+            ->orderBy('category')
             ->orderBy('name')
-            ->get(['id', 'name', 'description', 'duration_minutes', 'price']);
+            ->get(['id', 'name', 'category', 'description', 'duration_minutes', 'price']);
     }
 
     public function allOrdered(): Collection
     {
         return $this->model->newQuery()
+            ->orderBy('category')
             ->orderBy('name')
             ->get();
     }
 
     /**
-     * @param  array{name:string, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
+     * @param  array{name:string, category?:string|null, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
      */
     public function createService(array $data): Service
     {
         return $this->create([
             'name' => $data['name'],
+            'category' => $data['category'] ?? null,
             'description' => $data['description'] ?? null,
             'duration_minutes' => (int) $data['duration_minutes'],
             'price' => $data['price'],
@@ -43,12 +46,13 @@ class ServiceRepository extends BaseRepository
     }
 
     /**
-     * @param  array{name:string, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
+     * @param  array{name:string, category?:string|null, description?:string|null, duration_minutes:int, price:mixed, is_active?:bool}  $data
      */
     public function updateService(Service $service, array $data): Service
     {
         $this->update([
             'name' => $data['name'],
+            'category' => $data['category'] ?? $service->category,
             'description' => $data['description'] ?? null,
             'duration_minutes' => (int) $data['duration_minutes'],
             'price' => $data['price'],

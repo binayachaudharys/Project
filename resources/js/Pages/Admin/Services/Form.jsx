@@ -8,6 +8,7 @@ export default function ServiceForm({ service }) {
     const isEdit = Boolean(service?.id);
     const { data, setData, post, put, processing, errors } = useForm({
         name: service?.name ?? '',
+        category: service?.category ?? '',
         description: service?.description ?? '',
         duration_minutes: service?.duration_minutes ?? 30,
         price: service?.price ?? '',
@@ -46,6 +47,17 @@ export default function ServiceForm({ service }) {
                         required
                     />
                     <InputError message={errors.name} className="mt-1" />
+                </div>
+                <div>
+                    <InputLabel htmlFor="category" value="Category" />
+                    <TextInput
+                        id="category"
+                        className="mt-1 block w-full"
+                        value={data.category}
+                        onChange={(e) => setData('category', e.target.value)}
+                        placeholder="Hair Treatments"
+                    />
+                    <InputError message={errors.category} className="mt-1" />
                 </div>
                 <div>
                     <InputLabel htmlFor="description" value="Description" />

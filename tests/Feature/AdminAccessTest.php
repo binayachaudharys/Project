@@ -110,11 +110,15 @@ class AdminAccessTest extends TestCase
             'max_concurrent' => 2,
             'slot_minutes' => 30,
             'package_duration' => 60,
+            'vat_enabled' => true,
+            'vat_rate' => 13,
+            'vat_inclusive' => false,
         ])->assertRedirect();
 
         $this->assertDatabaseHas('settings', ['key' => 'salon_open', 'value' => '09:00']);
         $this->assertDatabaseHas('settings', ['key' => 'max_concurrent', 'value' => '2']);
         $this->assertDatabaseHas('settings', ['key' => 'auto_confirm', 'value' => '0']);
+        $this->assertDatabaseHas('settings', ['key' => 'vat_rate', 'value' => '13']);
     }
 
     public function test_sales_report_filters_paid_by_date_range(): void

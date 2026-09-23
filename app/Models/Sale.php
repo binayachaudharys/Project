@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'sale_number', 'customer_id', 'staff_id', 'appointment_id',
-    'subtotal', 'discount', 'total', 'status',
+    'subtotal', 'discount', 'tax', 'tax_rate', 'prices_include_vat', 'total', 'status',
 ])]
 class Sale extends Model
 {
@@ -19,6 +19,9 @@ class Sale extends Model
         return [
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
+            'tax' => 'decimal:2',
+            'tax_rate' => 'decimal:2',
+            'prices_include_vat' => 'boolean',
             'total' => 'decimal:2',
             'status' => SaleStatus::class,
         ];

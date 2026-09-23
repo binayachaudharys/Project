@@ -245,7 +245,41 @@ class BookingTest extends TestCase
                 'bookable_id' => $service->id,
                 'starts_at' => $starts->toIso8601String(),
             ])
-            ->assertSessionHasErrors('bookable_id');
+            ->assertSessionHasErrors('items.0.bookable_id');
+    }
+
+    public function test_customer_can_book_multiple_services_back_to_back(): void
+    {
+        Setting::create(['key' => 'max_concurrent', 'value' => '3']);
+
+        $customer = User::factory()->customer()->create();
+        $first = Service::factory()->create(['duration_minutes' => 30, 'is_active' => true]);
+        $second = Service::factory()->create(['duration_minutes' => 45, 'is_active' => true]);
+        $starts = now()->next('Wednesday')->setTime(11, 0);
+
+        $this->actingAs($customer)
+            ->post(route('book.store'), [
+                'items' => [
+                    ['bookable_type' => 'service', 'bookable_id' => $first->id],
+                    ['bookable_type' => 'service', 'bookable_id' => $second->id],
+                ],
+                'starts_at' => $starts->toIso8601String(),
+            ])
+            ->assertRedirect(route('account.appointments'));
+
+        $this->assertDatabaseCount('appointments', 2);
+        $this->assertDatabaseHas('appointments', [
+            'customer_id' => $customer->id,
+            'bookable_id' => $first->id,
+            'starts_at' => $starts->format('Y-m-d H:i:s'),
+            'ends_at' => $starts->copy()->addMinutes(30)->format('Y-m-d H:i:s'),
+        ]);
+        $this->assertDatabaseHas('appointments', [
+            'customer_id' => $customer->id,
+            'bookable_id' => $second->id,
+            'starts_at' => $starts->copy()->addMinutes(30)->format('Y-m-d H:i:s'),
+            'ends_at' => $starts->copy()->addMinutes(75)->format('Y-m-d H:i:s'),
+        ]);
     }
 
     public function test_guest_cannot_book(): void

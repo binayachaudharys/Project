@@ -40,29 +40,20 @@ class DatabaseSeeder extends Seeder
             'password' => bcrypt('ChangeMeCustomer1!'),
         ]);
 
-        $cut = Service::create([
-            'name' => 'Hair Cut',
-            'description' => 'Ladies hair cut',
-            'duration_minutes' => 45,
-            'price' => 800,
-            'is_active' => true,
-        ]);
+        $this->call(FlyerMenuServicesSeeder::class);
 
-        $color = Service::create([
-            'name' => 'Hair Color',
-            'description' => 'Full color',
-            'duration_minutes' => 90,
-            'price' => 2500,
-            'is_active' => true,
-        ]);
+        $cut = Service::query()->where('name', 'Hair Cut')->first();
+        $colour = Service::query()->where('name', 'Full Hair Colour')->first();
 
         $pkg = Package::create([
             'name' => 'Glow Package',
-            'description' => 'Cut + color bundle',
-            'price' => 3000,
+            'description' => 'Cut + colour bundle',
+            'price' => 4000,
             'is_active' => true,
         ]);
-        $pkg->services()->sync([$cut->id, $color->id]);
+        if ($cut && $colour) {
+            $pkg->services()->sync([$cut->id, $colour->id]);
+        }
 
         Product::create([
             'name' => 'Shampoo 250ml',
@@ -79,5 +70,8 @@ class DatabaseSeeder extends Seeder
         Setting::create(['key' => 'package_duration', 'value' => '60']);
         Setting::create(['key' => 'auto_confirm', 'value' => '1']);
         Setting::create(['key' => 'max_concurrent', 'value' => '1']);
+        Setting::create(['key' => 'vat_enabled', 'value' => '1']);
+        Setting::create(['key' => 'vat_rate', 'value' => '13']);
+        Setting::create(['key' => 'vat_inclusive', 'value' => '0']);
     }
 }

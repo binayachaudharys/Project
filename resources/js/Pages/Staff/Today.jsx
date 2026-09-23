@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 function formatTime(value) {
@@ -14,6 +14,12 @@ export default function StaffToday({ appointments }) {
             <Head title="Today" />
 
             <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+                <p className="mb-4 text-sm text-gray-600">
+                    <Link href={route('staff.billing.index')} className="font-medium text-rose-600 hover:text-rose-700">
+                        Open billing →
+                    </Link>
+                </p>
+
                 {appointments.length === 0 ? (
                     <p className="text-gray-500">No appointments scheduled for today.</p>
                 ) : (

@@ -10,9 +10,13 @@ export default function GuestLayout({ children }) {
                 </Link>
             </div>
 
-            <div className="mt-6 w-full overflow-hidden bg-white px-6 py-4 shadow-md sm:max-w-md sm:rounded-lg">
+            <main
+                id="main-content"
+                tabIndex={-1}
+                className="mt-6 w-full overflow-hidden bg-white px-6 py-4 shadow-md sm:max-w-md sm:rounded-lg"
+            >
                 {children}
-            </div>
+            </main>
         </div>
     );
 }

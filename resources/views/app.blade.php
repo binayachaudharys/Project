@@ -3,8 +3,10 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#E91E8C">
+        <meta name="description" content="{{ config('salon.name') }} — {{ config('salon.tagline') }}. Book hair, skin, laser, and beauty services.">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ config('salon.name', config('app.name', 'Laravel')) }}</title>
 
         <!-- Fonts: Fraunces (expressive display serif) + Manrope (body) -->
         <link rel="preconnect" href="https://fonts.bunny.net">
@@ -17,6 +19,9 @@
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
+        <a href="#main-content" class="skip-link">
+            Skip to main content
+        </a>
         @inertia
     </body>
 </html>

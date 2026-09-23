@@ -57,4 +57,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(StockMovement::class);
     }
+
+    /** Post-login home: owner admin, staff today board, customer dashboard. */
+    public function homeRoute(): string
+    {
+        return match ($this->role ?? UserRole::Customer) {
+            UserRole::Owner => 'admin.dashboard',
+            UserRole::Staff => 'staff.today',
+            default => 'dashboard',
+        };
+    }
 }

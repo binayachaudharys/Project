@@ -12,6 +12,9 @@ export default function SettingsIndex({ settings }) {
         package_duration: settings.package_duration ?? 60,
         auto_confirm: Boolean(settings.auto_confirm),
         max_concurrent: settings.max_concurrent ?? 1,
+        vat_enabled: settings.vat_enabled ?? true,
+        vat_rate: settings.vat_rate ?? 13,
+        vat_inclusive: Boolean(settings.vat_inclusive),
     });
 
     const submit = (e) => {
@@ -103,6 +106,54 @@ export default function SettingsIndex({ settings }) {
                     Auto-confirm bookings
                 </label>
                 <InputError message={errors.auto_confirm} className="mt-1" />
+
+                <div className="border-t border-rose-50 pt-5">
+                    <h2 className="font-display text-lg font-semibold text-charcoal-900">
+                        Nepal VAT
+                    </h2>
+                    <p className="mt-1 text-sm text-charcoal-500">
+                        Standard VAT rate is 13%. Exclusive adds VAT on top;
+                        inclusive extracts VAT from the line total.
+                    </p>
+                    <label className="mt-4 flex items-center gap-2 text-sm text-charcoal-700">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(data.vat_enabled)}
+                            onChange={(e) =>
+                                setData('vat_enabled', e.target.checked)
+                            }
+                        />
+                        Enable VAT on invoices
+                    </label>
+                    <InputError message={errors.vat_enabled} className="mt-1" />
+                    <div className="mt-3">
+                        <InputLabel htmlFor="vat_rate" value="VAT rate (%)" />
+                        <TextInput
+                            id="vat_rate"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            className="mt-1 block w-full"
+                            value={data.vat_rate}
+                            onChange={(e) => setData('vat_rate', e.target.value)}
+                            required
+                        />
+                        <InputError message={errors.vat_rate} className="mt-1" />
+                    </div>
+                    <label className="mt-3 flex items-center gap-2 text-sm text-charcoal-700">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(data.vat_inclusive)}
+                            onChange={(e) =>
+                                setData('vat_inclusive', e.target.checked)
+                            }
+                        />
+                        Catalog prices include VAT by default
+                    </label>
+                    <InputError message={errors.vat_inclusive} className="mt-1" />
+                </div>
+
                 <button
                     type="submit"
                     disabled={processing}
